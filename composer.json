@@ -1,0 +1,22 @@
+{
+    "name": "lotous-organization/laravel-filter",
+    "description": "A Laravel package for filterable traits",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "LotousOrganization\\LaravelFilter\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "mohammadreza",
+            "email": "esmaeeli1923@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+        "php": "^8.0|^8.1|^8.2|^8.3|^8.4",
+        "illuminate/support": "*"
+    }
+}
