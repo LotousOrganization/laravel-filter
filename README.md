@@ -1,6 +1,6 @@
 # Laravel Filterable
 
-![usermp-laravel-filterable](https://banners.beyondco.de/Laravel%20Filterable.png?theme=light&packageManager=composer+require&packageName=usermp%2Flaravel-filter&pattern=bankNote&style=style_1&description=The+Filterable+trait+is+designed+to+be+used+within+Eloquent+models+in+a+Laravel+application.&md=1&showWatermark=0&fontSize=100px&images=https%3A%2F%2Flaravel.com%2Fimg%2Flogomark.min.svg)
+![usermp-laravel-filterable](https://banners.beyondco.de/Laravel%20Filterable.png?theme=light&packageManager=composer+require&packageName=lotous-organization%2Flaravel-filter&pattern=bankNote&style=style_1&description=The+Filterable+trait+is+designed+to+be+used+within+Eloquent+models+in+a+Laravel+application.&md=1&showWatermark=0&fontSize=100px&images=https%3A%2F%2Flaravel.com%2Fimg%2Flogomark.min.svg)
 
 ## Overview
 
