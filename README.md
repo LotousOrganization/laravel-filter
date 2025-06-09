@@ -11,7 +11,7 @@ The `Filterable` trait is designed to be used within Eloquent models in a Larave
 1.  **Add the package to your project using Composer:**
 
     ```bash
-    composer require lotous-organization/laravel-filter
+    composer require lotous-organization/laravel-filter:"dev-master"
     ```
 
 2.  **Add the `Filterable` trait to your Eloquent model:**
