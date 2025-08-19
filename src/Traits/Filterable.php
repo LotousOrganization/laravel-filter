@@ -93,7 +93,8 @@ trait Filterable
         if (is_array($value)) {
             $query->where(function (Builder $subQuery) use ($field, $value) {
                 foreach ($value as $operator => $operand) {
-                    $operand = urldecode($operand);
+                    $operand = $this->decodeValue($operand);
+
                     switch (strtolower(trim($operator))) {
                         case 'equal': case '=':
                             $subQuery->where($field, '=', $operand);
@@ -117,8 +118,8 @@ trait Filterable
                             $subQuery->where($field, 'like', '%' . $operand . '%');
                             break;
                         case 'notlike':
-                             $subQuery->where($field, 'not like', '%' . $operand . '%');
-                             break;
+                            $subQuery->where($field, 'not like', '%' . $operand . '%');
+                            break;
                         case 'startswith':
                             $subQuery->where($field, 'like', $operand . '%');
                             break;
@@ -127,22 +128,22 @@ trait Filterable
                             break;
                         case 'in':
                             $actualValues = is_array($operand) ? $operand : explode(',', $operand);
-                            $subQuery->whereIn($field, array_map('urldecode', $actualValues));
+                            $subQuery->whereIn($field, $this->decodeValue($actualValues));
                             break;
                         case 'notin':
                             $actualValues = is_array($operand) ? $operand : explode(',', $operand);
-                            $subQuery->whereNotIn($field, array_map('urldecode', $actualValues));
+                            $subQuery->whereNotIn($field, $this->decodeValue($actualValues));
                             break;
                         case 'between':
                             if (is_array($operand) && count($operand) == 2) {
-                                $subQuery->whereBetween($field, [urldecode($operand[0]), urldecode($operand[1])]);
+                                $subQuery->whereBetween($field, $this->decodeValue($operand));
                             }
                             break;
                         case 'notbetween':
-                             if (is_array($operand) && count($operand) == 2) {
-                                 $subQuery->whereNotBetween($field, [urldecode($operand[0]), urldecode($operand[1])]);
-                             }
-                             break;
+                            if (is_array($operand) && count($operand) == 2) {
+                                $subQuery->whereNotBetween($field, $this->decodeValue($operand));
+                            }
+                            break;
                         case 'null':
                             $subQuery->whereNull($field);
                             break;
@@ -155,7 +156,17 @@ trait Filterable
                 }
             });
         } else {
-            $query->where($field, 'like', '%' . urldecode($value) . '%');
+            $query->where($field, 'like', '%' . $this->decodeValue($value) . '%');
         }
+    }
+
+
+    protected function decodeValue($value)
+    {
+        if (is_array($value)) {
+            return array_map(fn($v) => $this->decodeValue($v), $value);
+        }
+
+        return is_string($value) ? urldecode($value) : $value;
     }
 }
