@@ -4,69 +4,100 @@ namespace LotousOrganization\LaravelFilter\Traits;
 
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
 
 trait Filterable
 {
     protected string $filterRequestKey = 'filter';
+    protected string $filterAnyRequestKey = 'filter_any';
 
     public function scopeFilter(Builder $query, Request $request): Builder
     {
-        $rawFilters = $request->input($this->getFilterRequestKey(), []);
+        $this->applyFilters(
+            $query,
+            $request->input($this->getFilterRequestKey(), []),
+            'and'
+        );
 
-        if (!is_array($rawFilters) || empty($rawFilters)) {
-            return $query;
-        }
-
-        $processedFilters = $rawFilters;
-
-        $allowedAttributes = $this->getFilterableAttributes();
-        $allowedRelationBaseNames = $this->getFilterableRelations();
-
-        foreach ($processedFilters as $filterKey => $value) {
-            if (!isset($value) || ($value === '' && $value !== '0' && $value !== 0)) {
-                continue;
-            }
-
-            $isRelation = false;
-            $baseRelationName = null;
-
-            if (strpos($filterKey, '.') !== false) {
-                $baseRelationName = explode('.', $filterKey, 2)[0];
-                if (in_array($baseRelationName, $allowedRelationBaseNames)) {
-                    $isRelation = true;
-                }
-            }
-
-            if ($isRelation) {
-                $this->applyRelationFilter($query, $filterKey, $value);
-            } elseif (in_array($filterKey, $allowedAttributes)) {
-                $this->applyDirectFilter($query, $filterKey, $value);
-            }
-        }
+        $this->applyFilters(
+            $query,
+            $request->input($this->getFilterAnyRequestKey(), []),
+            'or'
+        );
 
         return $query;
     }
 
+    protected function applyFilters(Builder $query, array $rawFilters, string $boolean): void
+    {
+        if (empty($rawFilters) || !is_array($rawFilters)) {
+            return;
+        }
+
+        $allowedAttributes = $this->getFilterableAttributes();
+        $allowedRelationBaseNames = $this->getFilterableRelations();
+
+        $query->where(function (Builder $q) use (
+            $rawFilters,
+            $allowedAttributes,
+            $allowedRelationBaseNames,
+            $boolean
+        ) {
+            foreach ($rawFilters as $filterKey => $value) {
+                if (!isset($value) || ($value === '' && $value !== '0' && $value !== 0)) {
+                    continue;
+                }
+
+                $method = $boolean === 'or' ? 'orWhere' : 'where';
+
+                // relation filter
+                if (str_contains($filterKey, '.')) {
+                    $baseRelation = explode('.', $filterKey, 2)[0];
+
+                    if (in_array($baseRelation, $allowedRelationBaseNames)) {
+                        $q->$method(function (Builder $sub) use ($filterKey, $value) {
+                            $this->applyRelationFilter($sub, $filterKey, $value);
+                        });
+                    }
+
+                    continue;
+                }
+
+                // direct filter
+                if (in_array($filterKey, $allowedAttributes)) {
+                    $q->$method(function (Builder $sub) use ($filterKey, $value) {
+                        $this->applyDirectFilter($sub, $filterKey, $value);
+                    });
+                }
+            }
+        });
+    }
+
     protected function getFilterRequestKey(): string
     {
-        return property_exists($this, 'filterRequestKeyOverride') ? $this->filterRequestKeyOverride : $this->filterRequestKey;
+        return property_exists($this, 'filterRequestKeyOverride')
+            ? $this->filterRequestKeyOverride
+            : $this->filterRequestKey;
+    }
+
+    protected function getFilterAnyRequestKey(): string
+    {
+        return property_exists($this, 'filterAnyRequestKeyOverride')
+            ? $this->filterAnyRequestKeyOverride
+            : $this->filterAnyRequestKey;
     }
 
     protected function getFilterableAttributes(): array
     {
-        if (!property_exists($this, 'filterable') || !is_array($this->filterable)) {
-            return [];
-        }
-        return $this->filterable;
+        return property_exists($this, 'filterable') && is_array($this->filterable)
+            ? $this->filterable
+            : [];
     }
 
     protected function getFilterableRelations(): array
     {
-        if (!property_exists($this, 'filterableRelations') || !is_array($this->filterableRelations)) {
-            return [];
-        }
-        return $this->filterableRelations;
+        return property_exists($this, 'filterableRelations') && is_array($this->filterableRelations)
+            ? $this->filterableRelations
+            : [];
     }
 
     protected function applyDirectFilter(Builder $query, string $filterAttribute, $value): void
@@ -80,12 +111,9 @@ trait Filterable
         $attributeName = array_pop($parts);
         $relationPath = implode('.', $parts);
 
-        $filterLogic = function (Builder $relationQuery) use ($attributeName, $value) {
+        $query->whereHas($relationPath, function (Builder $relationQuery) use ($attributeName, $value) {
             $this->applyWhereConditions($relationQuery, $attributeName, $value);
-        };
-
-        $query->whereHas($relationPath, $filterLogic);
-        $query->with([$relationPath => $filterLogic]);
+        });
     }
 
     protected function applyWhereConditions(Builder $query, string $field, $value): void
@@ -95,64 +123,29 @@ trait Filterable
                 foreach ($value as $operator => $operand) {
                     $operand = $this->decodeValue($operand);
 
-                    switch (strtolower(trim($operator))) {
-                        case 'equal': case '=':
-                            $subQuery->where($field, '=', $operand);
-                            break;
-                        case 'notequal': case '!=': case '<>':
-                            $subQuery->where($field, '!=', $operand);
-                            break;
-                        case 'gt': case '>':
-                            $subQuery->where($field, '>', $operand);
-                            break;
-                        case 'gte': case '>=':
-                            $subQuery->where($field, '>=', $operand);
-                            break;
-                        case 'lt': case '<':
-                            $subQuery->where($field, '<', $operand);
-                            break;
-                        case 'lte': case '<=':
-                            $subQuery->where($field, '<=', $operand);
-                            break;
-                        case 'like':
-                            $subQuery->where($field, 'like', '%' . $operand . '%');
-                            break;
-                        case 'notlike':
-                            $subQuery->where($field, 'not like', '%' . $operand . '%');
-                            break;
-                        case 'startswith':
-                            $subQuery->where($field, 'like', $operand . '%');
-                            break;
-                        case 'endswith':
-                            $subQuery->where($field, 'like', '%' . $operand);
-                            break;
-                        case 'in':
-                            $actualValues = is_array($operand) ? $operand : explode(',', $operand);
-                            $subQuery->whereIn($field, $this->decodeValue($actualValues));
-                            break;
-                        case 'notin':
-                            $actualValues = is_array($operand) ? $operand : explode(',', $operand);
-                            $subQuery->whereNotIn($field, $this->decodeValue($actualValues));
-                            break;
-                        case 'between':
-                            if (is_array($operand) && count($operand) == 2) {
-                                $subQuery->whereBetween($field, $this->decodeValue($operand));
-                            }
-                            break;
-                        case 'notbetween':
-                            if (is_array($operand) && count($operand) == 2) {
-                                $subQuery->whereNotBetween($field, $this->decodeValue($operand));
-                            }
-                            break;
-                        case 'null':
-                            $subQuery->whereNull($field);
-                            break;
-                        case 'notnull':
-                            $subQuery->whereNotNull($field);
-                            break;
-                        default:
-                            break;
-                    }
+                    match (strtolower($operator)) {
+                        'equal', '='        => $subQuery->where($field, '=', $operand),
+                        'notequal', '!=', '<>' => $subQuery->where($field, '!=', $operand),
+                        'gt', '>'           => $subQuery->where($field, '>', $operand),
+                        'gte', '>='         => $subQuery->where($field, '>=', $operand),
+                        'lt', '<'           => $subQuery->where($field, '<', $operand),
+                        'lte', '<='         => $subQuery->where($field, '<=', $operand),
+                        'like'              => $subQuery->where($field, 'like', "%$operand%"),
+                        'notlike'           => $subQuery->where($field, 'not like', "%$operand%"),
+                        'startswith'        => $subQuery->where($field, 'like', "$operand%"),
+                        'endswith'          => $subQuery->where($field, 'like', "%$operand"),
+                        'in'                => $subQuery->whereIn($field, (array) $operand),
+                        'notin'             => $subQuery->whereNotIn($field, (array) $operand),
+                        'between'           => is_array($operand) && count($operand) === 2
+                                                ? $subQuery->whereBetween($field, $operand)
+                                                : null,
+                        'notbetween'        => is_array($operand) && count($operand) === 2
+                                                ? $subQuery->whereNotBetween($field, $operand)
+                                                : null,
+                        'null'              => $subQuery->whereNull($field),
+                        'notnull'           => $subQuery->whereNotNull($field),
+                        default             => null,
+                    };
                 }
             });
         } else {
@@ -160,11 +153,10 @@ trait Filterable
         }
     }
 
-
     protected function decodeValue($value)
     {
         if (is_array($value)) {
-            return array_map(fn($v) => $this->decodeValue($v), $value);
+            return array_map(fn ($v) => $this->decodeValue($v), $value);
         }
 
         return is_string($value) ? urldecode($value) : $value;
